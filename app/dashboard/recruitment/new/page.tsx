@@ -12,6 +12,11 @@ export default function NewRecruitmentPage() {
   });
   // ... (保留 loading, router)
 
+  // *** 請新增以下兩行來修復錯誤 ***
+  const [loading, setLoading] = useState(false); // <--- 新增：定義 loading 狀態
+  const router = useRouter();                    // <--- 新增：定義 router
+  // **********************************
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
