@@ -13,11 +13,11 @@ export default function LandingPage() {
         
         {/* 模擬登入按鈕 */}
         <Link 
-          href="/dashboard" 
-          className="inline-block bg-slate-900 text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-slate-800 transition-all hover:scale-105 shadow-lg"
-        >
-          進入平台 (模擬登入) →
-        </Link>
+  href="/login" 
+  className="inline-block bg-slate-900 text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-slate-800 transition-all hover:scale-105 shadow-lg"
+>
+  免費註冊 / 登入 →
+</Link>
       </div>
     </main>
   );

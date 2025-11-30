@@ -1,56 +1,53 @@
 import { client } from '@/lib/sanity';
 import Link from 'next/link';
 
-// 設定為 0 代表每次進來都抓最新的資料，不快取
 export const revalidate = 0;
 
 export default async function ResearchPage() {
-  // 1. 去 Sanity 抓文章
   const posts = await client.fetch(`*[_type == "post"] | order(_createdAt desc) {
-    _id, 
-    title, 
-    slug, 
-    _createdAt
+    _id, title, slug, _createdAt
   }`);
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-slate-900">最新研究專欄</h2>
-        <span className="text-sm text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
-          共 {posts.length} 篇文章
-        </span>
+    <div className="max-w-5xl mx-auto space-y-10">
+      <div className="flex flex-col md:flex-row justify-between items-end border-b border-slate-200 pb-6">
+        <div>
+          <h2 className="text-3xl font-bold text-slate-900">🔬 最新研究專欄</h2>
+          <p className="text-slate-500 mt-2">探索心理學前沿趨勢、期刊選讀與實務應用。</p>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {posts.length > 0 ? (
-          posts.map((post: any) => (
-            <Link 
-              href={`/blog/${post.slug?.current}`} 
-              key={post._id}
-              className="group block bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:border-purple-400 hover:shadow-md transition-all h-full flex flex-col"
-            >
-              {/* 裝飾用的圖示 */}
-              <div className="w-10 h-10 bg-purple-50 text-purple-600 rounded-lg flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                📄
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-12">
+        {posts.map((post: any) => (
+          <Link 
+            href={`/blog/${post.slug?.current}`} 
+            key={post._id}
+            className="group block"
+          >
+            {/* 偽圖片區塊 (如果有真實圖片可替換) */}
+            <div className="aspect-video bg-slate-100 rounded-xl mb-4 overflow-hidden relative">
+              <div className="absolute inset-0 bg-gradient-to-tr from-blue-50 to-purple-50 group-hover:scale-105 transition-transform duration-500"></div>
+              <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur px-3 py-1 rounded-full text-xs font-bold text-slate-600">
+                專欄文章
               </div>
+            </div>
 
-              <h3 className="text-lg font-bold text-slate-800 mb-2 line-clamp-2 group-hover:text-purple-700">
+            <div className="space-y-2">
+              <time className="text-xs text-slate-400 uppercase tracking-wider">
+                {new Date(post._createdAt).toLocaleDateString('zh-TW')}
+              </time>
+              <h3 className="text-xl font-bold text-slate-900 group-hover:text-blue-600 transition-colors leading-tight">
                 {post.title}
               </h3>
-              
-              <div className="mt-auto pt-4 flex items-center justify-between text-sm text-slate-400">
-                <span>{new Date(post._createdAt).toLocaleDateString('zh-TW')}</span>
-                <span className="group-hover:translate-x-1 transition-transform">閱讀全文 →</span>
-              </div>
-            </Link>
-          ))
-        ) : (
-          <div className="col-span-full py-12 text-center text-slate-500 bg-slate-50 rounded-xl border border-dashed border-slate-300">
-            <p>目前還沒有發布任何研究文章。</p>
-            <p className="text-sm mt-2">請前往 <a href="/studio" className="text-blue-600 underline">後台 (Studio)</a> 撰寫第一篇！</p>
-          </div>
-        )}
+              <p className="text-sm text-slate-500 line-clamp-2">
+                點擊閱讀完整內容，深入了解此議題的詳細分析...
+              </p>
+              <span className="inline-block text-sm font-bold text-blue-600 mt-2 group-hover:translate-x-1 transition-transform">
+                閱讀更多 →
+              </span>
+            </div>
+          </Link>
+        ))}
       </div>
     </div>
   );
