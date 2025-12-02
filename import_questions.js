@@ -6,7 +6,7 @@ require('dotenv').config({ path: '.env.local' });
 // 1. 設定 Supabase 連線
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 // 這裡使用您的 service_role key (請確認您有沒有換回正確的 key，或者直接貼上 service_role key)
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtiY2dtZ3F4Y21scm5mamF4ZGxoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NDUwNjkzNSwiZXhwIjoyMDgwMDgyOTM1fQ.hoUc_-Y6xZx-NL7390axtPQXNgm9lMAcUx61o93IHgg'; 
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY; 
 // ⚠️ 如果匯入失敗顯示權限錯誤，請記得像上次一樣，把上面這行換成 service_role key
 
 if (!supabaseUrl || !supabaseKey) {
