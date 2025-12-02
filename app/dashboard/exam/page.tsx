@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 import ExamBoard from '@/components/ExamBoard';
 import MockExamBoard from '@/components/MockExamBoard';
 import ReportButton from '@/components/ReportButton';
-import BookmarkButton from '@/components/BookmarkButton'; // [新增] 引入收藏按鈕
+import BookmarkButton from '@/components/BookmarkButton';
 import Link from 'next/link';
 
 // 強力清潔工具
@@ -14,15 +14,10 @@ const cleanText = (text: string) => {
   return text.trim().replace(/^["']|["']$/g, "");
 };
 
-// 洗牌演算法
-function shuffleArray(array: any[]) {
-  const newArr = [...array];
-  for (let i = newArr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
-  }
-  return newArr;
-}
+// [修改] 移除前端洗牌，改用後端隨機
+// function shuffleArray ... (移除)
+
+const ITEMS_PER_PAGE = 20; // 每次只抓 20 題，保證速度飛快
 
 export default function ExamPage() {
   const [questions, setQuestions] = useState<any[]>([]);
@@ -41,6 +36,10 @@ export default function ExamPage() {
   const [subjectFilter, setSubjectFilter] = useState('ALL');
   const [tagFilter, setTagFilter] = useState('ALL');
   const [onlyMistakes, setOnlyMistakes] = useState(false);
+
+  // [新增] 分頁狀態
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
 
   useEffect(() => {
     const initData = async () => {
@@ -70,66 +69,106 @@ export default function ExamPage() {
       }
     };
     initData();
-    fetchQuestions('browse'); 
+    // 初始載入
+    fetchQuestions('browse', 0, true); 
   }, []);
 
-  const fetchQuestions = async (targetMode: string) => {
+  // [修改] 抓取函數：加入分頁參數
+  const fetchQuestions = async (targetMode: string, pageNum: number, isReset: boolean = false) => {
     setLoading(true);
-    setQuestions([]);
-    const { data: { user } } = await supabase.auth.getUser();
-    let rawQuestions: any[] = [];
+    if (isReset) {
+      setQuestions([]);
+      setPage(0);
+      setHasMore(true);
+    }
 
+    const { data: { user } } = await supabase.auth.getUser();
+    let newQuestions: any[] = [];
+
+    // --- 錯題模式 ---
     if (onlyMistakes) {
       if (!user) { alert("請先登入"); setLoading(false); return; }
+      // 錯題本通常數量不多，我們維持一次抓取，但在前端做分頁
+      // (如果要優化，需要在資料庫層級改寫，目前先維持原樣以免改壞)
       const { data } = await supabase.from('wrong_answers').select('question:questions(*)').eq('user_id', user.id);
-      if (data) rawQuestions = data.map((item: any) => item.question);
+      if (data) newQuestions = data.map((item: any) => item.question);
+      
+      // 前端過濾
+      if (yearFilter !== 'ALL') newQuestions = newQuestions.filter(q => q.year === yearFilter);
+      if (subjectFilter !== 'ALL') newQuestions = newQuestions.filter(q => q.subject === subjectFilter);
+      if (tagFilter !== 'ALL') newQuestions = newQuestions.filter(q => q.tags?.includes(tagFilter));
+
+      // 分頁切片
+      const start = pageNum * ITEMS_PER_PAGE;
+      const end = start + ITEMS_PER_PAGE;
+      const sliced = newQuestions.slice(start, end);
+      
+      if (sliced.length < ITEMS_PER_PAGE) setHasMore(false);
+      
+      if (isReset) setQuestions(sliced);
+      else setQuestions(prev => [...prev, ...sliced]);
+
     } else {
+      // --- 一般模式 (使用 Supabase 分頁) ---
       let query = supabase.from('questions').select('*');
+      
       if (targetMode === 'mock_exam') {
         if (mockSubject !== 'ALL') query = query.eq('subject', mockSubject);
+        // 模擬考隨機抓 N 題 (這裡簡單用 limit)
+        query = query.limit(mockCount); 
       } else {
+        // 一般閱覽：加入篩選
         if (yearFilter !== 'ALL') query = query.eq('year', yearFilter);
         if (subjectFilter !== 'ALL') query = query.eq('subject', subjectFilter);
         if (tagFilter !== 'ALL') query = query.contains('tags', [tagFilter]);
+        
+        // [關鍵] 加入分頁範圍
+        const from = pageNum * ITEMS_PER_PAGE;
+        const to = from + ITEMS_PER_PAGE - 1;
+        query = query.range(from, to);
+        
+        // 排序 (建議加上排序以確保分頁穩定)
+        query = query.order('id', { ascending: true });
       }
+      
       const { data } = await query;
-      if (data) rawQuestions = data;
+      
+      if (data) {
+        if (data.length < ITEMS_PER_PAGE) setHasMore(false);
+        
+        if (isReset) setQuestions(data);
+        else setQuestions(prev => [...prev, ...data]);
+      }
     }
-
-    if (onlyMistakes && targetMode !== 'mock_exam') {
-      if (yearFilter !== 'ALL') rawQuestions = rawQuestions.filter(q => q.year === yearFilter);
-      if (subjectFilter !== 'ALL') rawQuestions = rawQuestions.filter(q => q.subject === subjectFilter);
-      if (tagFilter !== 'ALL') rawQuestions = rawQuestions.filter(q => q.tags?.includes(tagFilter));
-    }
-
-    if (targetMode === 'mock_exam') {
-      const choices = rawQuestions.filter(q => q.type !== 'essay');
-      const limit = Math.min(choices.length, mockCount);
-      const shuffled = shuffleArray(choices).slice(0, limit);
-      setQuestions(shuffled);
-    } else {
-      const essays = rawQuestions.filter(q => q.type === 'essay');
-      const choices = rawQuestions.filter(q => q.type !== 'essay');
-      setQuestions([...shuffleArray(choices), ...essays]);
-    }
+    
     setLoading(false);
   };
 
+  // 當篩選條件改變時，重置並重抓
   useEffect(() => {
-    if (mode === 'browse' || mode === 'quiz') fetchQuestions(mode);
+    if (mode === 'browse' || mode === 'quiz') {
+      fetchQuestions(mode, 0, true);
+    }
   }, [yearFilter, subjectFilter, tagFilter, onlyMistakes]);
 
-  const startMockExam = () => { setMode('mock_exam'); fetchQuestions('mock_exam'); };
+  // 載入更多
+  const loadMore = () => {
+    const nextPage = page + 1;
+    setPage(nextPage);
+    fetchQuestions(mode, nextPage, false);
+  };
+
+  const startMockExam = () => { setMode('mock_exam'); fetchQuestions('mock_exam', 0, true); };
 
   if (mode === 'mock_exam') {
-    return loading ? <div className="text-center py-20 text-slate-500 animate-pulse">正在準備模擬試卷...</div> : 
-      <MockExamBoard questions={questions} timeLimit={mockTime} onExit={() => { setMode('browse'); fetchQuestions('browse'); }} />;
+    return loading && questions.length === 0 ? <div className="text-center py-20 text-slate-500 animate-pulse">正在準備模擬試卷...</div> : 
+      <MockExamBoard questions={questions} timeLimit={mockTime} onExit={() => { setMode('browse'); fetchQuestions('browse', 0, true); }} />;
   }
 
   return (
     <div className="space-y-6">
       
-      {/* 標題與控制列 */}
+      {/* 標題與控制列 (保持不變) */}
       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
         <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 gap-4">
           <h2 className="text-2xl font-bold text-slate-900 flex items-center">
@@ -150,7 +189,6 @@ export default function ExamPage() {
           </div>
         </div>
 
-        {/* 模擬考設定面板 */}
         {mode === 'mock_setup' ? (
           <div className="bg-amber-50 rounded-xl p-6 border border-amber-100 animate-in fade-in slide-in-from-top-2">
             <h3 className="font-bold text-amber-800 mb-4 text-lg">⏱️ 設定您的模擬考試</h3>
@@ -174,7 +212,6 @@ export default function ExamPage() {
             <button onClick={startMockExam} className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-xl shadow-md transition-transform hover:scale-[1.01]">開始計時考試</button>
           </div>
         ) : (
-          // 篩選器
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <select value={yearFilter} onChange={(e) => setYearFilter(e.target.value)} className="p-3 border border-slate-300 rounded-lg bg-white">
               <option value="ALL">📅 所有年份</option>
@@ -192,11 +229,9 @@ export default function ExamPage() {
         )}
       </div>
 
-      {/* 結果列表 */}
       {mode !== 'mock_setup' && (
-        loading ? (
-          <div className="text-center py-10 text-slate-500">{onlyMistakes ? '正在挖掘您的錯題...' : '正在載入題目...'}</div>
-        ) : questions.length === 0 ? (
+        // === 列表渲染區 ===
+        questions.length === 0 && !loading ? (
           <div className="text-center py-16 text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-300">
             <p>找不到符合條件的題目。</p>
             <button onClick={() => {setYearFilter('ALL'); setSubjectFilter('ALL'); setTagFilter('ALL'); setOnlyMistakes(false)}} className="text-blue-600 underline mt-4">重置條件</button>
@@ -214,7 +249,7 @@ export default function ExamPage() {
               return (
                 <div key={q.id} className={`bg-white p-6 rounded-xl border transition-colors relative ${isEssay ? 'border-purple-200 hover:border-purple-400' : 'border-slate-200 hover:border-blue-300'}`}>
                   
-                  {/* [新增] 收藏按鈕 (絕對定位在右上角) */}
+                  {/* 收藏按鈕 */}
                   <div className="absolute top-4 right-4 z-10">
                     <BookmarkButton questionId={q.id} />
                   </div>
@@ -225,7 +260,6 @@ export default function ExamPage() {
                       <span className="bg-slate-100 text-slate-600 text-xs px-2 py-1 rounded font-mono">{q.year} | {q.subject}</span>
                       {q.tags?.map((t: string) => <span key={t} className="bg-gray-50 text-gray-500 text-xs px-2 py-1 rounded border border-gray-100">#{cleanText(t)}</span>)}
                     </div>
-                    {/* ID 移除 */}
                   </div>
                   
                   <h3 className={`text-lg font-bold text-slate-800 mb-4 ${isEssay ? 'whitespace-pre-wrap' : ''}`}><span className="mr-2 text-slate-400">{idx + 1}.</span>{q.content}</h3>
@@ -271,6 +305,19 @@ export default function ExamPage() {
                 </div>
               );
             })}
+            
+            {/* [新增] 載入更多按鈕 */}
+            {hasMore && (
+              <div className="text-center pt-8">
+                <button 
+                  onClick={loadMore} 
+                  disabled={loading}
+                  className="bg-white border border-slate-300 text-slate-600 px-6 py-3 rounded-full hover:bg-slate-50 hover:border-slate-400 transition-colors shadow-sm font-bold disabled:opacity-50"
+                >
+                  {loading ? '載入中...' : '⬇️ 載入更多試題'}
+                </button>
+              </div>
+            )}
           </div>
         )
       )}
