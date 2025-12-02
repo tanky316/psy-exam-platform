@@ -5,7 +5,7 @@ require('dotenv').config({ path: '.env.local' });
 
 // 請確認這裡有讀到 Service Role Key
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SANITY_DATASET; 
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtiY2dtZ3F4Y21scm5mamF4ZGxoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NDUwNjkzNSwiZXhwIjoyMDgwMDgyOTM1fQ.hoUc_-Y6xZx-NL7390axtPQXNgm9lMAcUx61o93IHgg'; 
 
 if (!supabaseUrl || !supabaseKey) {
   console.error('❌ 錯誤：找不到 Key，請確認 .env.local');
