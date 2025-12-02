@@ -4,9 +4,11 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import ExamBoard from '@/components/ExamBoard';
 import MockExamBoard from '@/components/MockExamBoard';
+import ReportButton from '@/components/ReportButton';
+import BookmarkButton from '@/components/BookmarkButton'; // [新增] 引入收藏按鈕
 import Link from 'next/link';
 
-// 強力清潔工具：移除前後引號、移除空白
+// 強力清潔工具
 const cleanText = (text: string) => {
   if (!text) return "";
   return text.trim().replace(/^["']|["']$/g, "");
@@ -126,6 +128,8 @@ export default function ExamPage() {
 
   return (
     <div className="space-y-6">
+      
+      {/* 標題與控制列 */}
       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
         <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 gap-4">
           <h2 className="text-2xl font-bold text-slate-900 flex items-center">
@@ -146,6 +150,7 @@ export default function ExamPage() {
           </div>
         </div>
 
+        {/* 模擬考設定面板 */}
         {mode === 'mock_setup' ? (
           <div className="bg-amber-50 rounded-xl p-6 border border-amber-100 animate-in fade-in slide-in-from-top-2">
             <h3 className="font-bold text-amber-800 mb-4 text-lg">⏱️ 設定您的模擬考試</h3>
@@ -169,6 +174,7 @@ export default function ExamPage() {
             <button onClick={startMockExam} className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-xl shadow-md transition-transform hover:scale-[1.01]">開始計時考試</button>
           </div>
         ) : (
+          // 篩選器
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <select value={yearFilter} onChange={(e) => setYearFilter(e.target.value)} className="p-3 border border-slate-300 rounded-lg bg-white">
               <option value="ALL">📅 所有年份</option>
@@ -186,6 +192,7 @@ export default function ExamPage() {
         )}
       </div>
 
+      {/* 結果列表 */}
       {mode !== 'mock_setup' && (
         loading ? (
           <div className="text-center py-10 text-slate-500">{onlyMistakes ? '正在挖掘您的錯題...' : '正在載入題目...'}</div>
@@ -205,15 +212,24 @@ export default function ExamPage() {
               else if (typeof q.options === 'string') { try { safeOptions = JSON.parse(q.options); } catch (e) { safeOptions = []; } }
 
               return (
-                <div key={q.id} className={`bg-white p-6 rounded-xl border transition-colors ${isEssay ? 'border-purple-200 hover:border-purple-400' : 'border-slate-200 hover:border-blue-300'}`}>
-                  <div className="flex justify-between items-start mb-4">
+                <div key={q.id} className={`bg-white p-6 rounded-xl border transition-colors relative ${isEssay ? 'border-purple-200 hover:border-purple-400' : 'border-slate-200 hover:border-blue-300'}`}>
+                  
+                  {/* [新增] 收藏按鈕 (絕對定位在右上角) */}
+                  <div className="absolute top-4 right-4 z-10">
+                    <BookmarkButton questionId={q.id} />
+                  </div>
+
+                  <div className="flex justify-between items-start mb-4 pr-10">
                     <div className="flex flex-wrap gap-2 items-center">
                       {isEssay ? <span className="bg-purple-100 text-purple-700 text-xs px-2 py-1 rounded border border-purple-200 font-bold">📝 申論/問答</span> : <span className="bg-blue-50 text-blue-600 text-xs px-2 py-1 rounded border border-blue-100 font-bold">☑️ 選擇</span>}
                       <span className="bg-slate-100 text-slate-600 text-xs px-2 py-1 rounded font-mono">{q.year} | {q.subject}</span>
                       {q.tags?.map((t: string) => <span key={t} className="bg-gray-50 text-gray-500 text-xs px-2 py-1 rounded border border-gray-100">#{cleanText(t)}</span>)}
                     </div>
+                    {/* ID 移除 */}
                   </div>
+                  
                   <h3 className={`text-lg font-bold text-slate-800 mb-4 ${isEssay ? 'whitespace-pre-wrap' : ''}`}><span className="mr-2 text-slate-400">{idx + 1}.</span>{q.content}</h3>
+                  
                   {!isEssay && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-4 pl-4 border-l-2 border-slate-100">
                       {safeOptions.map((opt, i) => {
@@ -226,6 +242,7 @@ export default function ExamPage() {
                       })}
                     </div>
                   )}
+                  
                   <div className="relative overflow-hidden rounded-lg">
                     {isVip ? (
                       <div className={`${isEssay ? 'bg-purple-50' : 'bg-green-50'} p-5 text-sm`}>
@@ -233,10 +250,7 @@ export default function ExamPage() {
                            {!isEssay ? <p className="font-bold text-green-800">✅ 正確答案：{cleanText(q.answer)}</p> : <p className="font-bold text-purple-800">💡 參考解析</p>}
                            <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">👑 VIP 已解鎖</span>
                         </div>
-                        {/* [關鍵修正] 加入 replace 處理換行 */}
-                        <div className="text-slate-700 whitespace-pre-wrap">
-                          {q.explanation?.replace(/\\n/g, '\n')}
-                        </div>
+                        <div className="text-slate-700 whitespace-pre-wrap">{q.explanation?.replace(/\\n/g, '\n')}</div>
                         {q.concept_slug && <Link href={`/dashboard/knowledge/${q.concept_slug}`} target="_blank" className="inline-flex items-center text-blue-600 font-bold mt-3 hover:underline">📖 延伸閱讀</Link>}
                       </div>
                     ) : (
@@ -249,6 +263,10 @@ export default function ExamPage() {
                         </div>
                       </div>
                     )}
+                  </div>
+
+                  <div className="mt-4 flex justify-end">
+                    <ReportButton questionId={q.id} />
                   </div>
                 </div>
               );

@@ -51,6 +51,7 @@ export default function DashboardLayout({
     { name: '知識', href: '/dashboard/knowledge', icon: '📚' },
     { name: '徵求', href: '/dashboard/recruitment', icon: '📢' },
     { name: '錯題', href: '/dashboard/mistakes', icon: '📒' },
+    { name: '收藏', href: '/dashboard/bookmarks', icon: '⭐' },
   ];
 
   return (

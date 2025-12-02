@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import ReportButton from "./ReportButton";
+import BookmarkButton from "./BookmarkButton"; // [新增]
 
 type QuestionProps = {
   question: {
@@ -33,7 +35,6 @@ export default function QuestionCard({ question }: QuestionProps) {
       try {
         opts = JSON.parse(question.options);
       } catch (e) {
-        // 嘗試清理後再解析
         try {
           const cleaned = question.options.replace(/^["']|["']$/g, "").replace(/\\"/g, '"');
           opts = JSON.parse(cleaned);
@@ -78,15 +79,22 @@ export default function QuestionCard({ question }: QuestionProps) {
     setIsSaving(false);
   };
 
+  // --- 申論題模式 ---
   if (question.type === 'essay') {
     return (
       <div className="w-full max-w-2xl bg-white p-6 rounded-xl shadow-lg border border-purple-200 my-4 relative animate-in fade-in slide-in-from-bottom-4">
+        {/* [新增] 收藏按鈕 (絕對定位在右上角) */}
+        <div className="absolute top-4 right-4 z-10">
+          <BookmarkButton questionId={question.id} />
+        </div>
+
         <span className="bg-purple-100 text-purple-700 text-xs px-2 py-1 rounded mb-3 inline-block font-bold">
           📝 申論/問答題
         </span>
-        <h3 className="text-xl font-bold text-slate-800 mb-6 leading-relaxed whitespace-pre-wrap">
+        <h3 className="text-xl font-bold text-slate-800 mb-6 leading-relaxed whitespace-pre-wrap pr-8">
           {question.content}
         </h3>
+        
         {!showResult ? (
           <button onClick={checkAnswer} className="w-full py-3 bg-slate-900 text-white rounded-lg font-bold hover:bg-slate-800 transition-colors shadow-md">
             查看參考解析
@@ -94,25 +102,34 @@ export default function QuestionCard({ question }: QuestionProps) {
         ) : (
           <div className="mt-4 p-6 bg-purple-50 rounded-xl border border-purple-100 animate-in fade-in">
             <p className="font-bold text-purple-900 mb-3 text-lg">💡 參考解析 / 評分重點</p>
-            {/* [關鍵修正] 處理換行 */}
             <div className="text-slate-700 leading-relaxed whitespace-pre-wrap">
               {question.explanation?.replace(/\\n/g, '\n')}
             </div>
           </div>
         )}
+
+        <div className="mt-4 flex justify-end">
+          <ReportButton questionId={question.id} />
+        </div>
       </div>
     );
   }
 
+  // --- 選擇題模式 ---
   return (
     <div className="w-full max-w-2xl bg-white p-6 rounded-xl shadow-lg border border-slate-200 my-4 relative animate-in fade-in slide-in-from-bottom-4">
-      {showResult && selectedOption && !isCorrect(selectedOption) && (
-        <div className="absolute top-4 right-4 text-xs font-bold text-red-500 bg-red-50 px-3 py-1 rounded-full border border-red-100">
-          {isSaving ? "💾 記錄中..." : "📒 已加入錯題本"}
-        </div>
-      )}
+      
+      {/* [新增] 收藏按鈕 + 錯題提示的排版 */}
+      <div className="absolute top-4 right-4 flex items-center gap-3 z-10">
+        {showResult && selectedOption && !isCorrect(selectedOption) && (
+          <div className="text-xs font-bold text-red-500 bg-red-50 px-3 py-1 rounded-full border border-red-100">
+            {isSaving ? "💾..." : "📒 已加入錯題"}
+          </div>
+        )}
+        <BookmarkButton questionId={question.id} />
+      </div>
 
-      <h3 className="text-xl font-bold text-slate-800 mb-6 leading-relaxed">
+      <h3 className="text-xl font-bold text-slate-800 mb-6 leading-relaxed pr-8">
         {question.content}
       </h3>
 
@@ -142,7 +159,7 @@ export default function QuestionCard({ question }: QuestionProps) {
                   <span className={`w-7 h-7 flex-shrink-0 flex items-center justify-center rounded-full border text-sm mr-3 font-medium transition-colors ${showResult && isCorrect(opt) ? 'border-green-600 bg-green-200 text-green-800' : 'border-current'}`}>
                     {String.fromCharCode(65 + index)}
                   </span>
-                  <span className="text-lg">{cleanText(opt)}</span>
+                  {cleanText(opt)}
                 </div>
               </button>
             );
@@ -164,14 +181,16 @@ export default function QuestionCard({ question }: QuestionProps) {
             <p className={`font-bold text-lg mb-2 ${selectedOption && isCorrect(selectedOption) ? 'text-green-800' : 'text-red-800'}`}>
               {selectedOption && isCorrect(selectedOption) ? '🎉 答對了！' : '❌ 答錯了，再接再厲！'}
             </p>
-            {/* [關鍵修正] 處理換行 */}
-            <div className="text-slate-700 leading-relaxed pt-2 border-t border-black/5 whitespace-pre-wrap">
-              <span className="font-bold text-slate-900">解析：</span>
-              {question.explanation?.replace(/\\n/g, '\n')}
+            <div className="text-slate-700 leading-relaxed pt-2 border-t border-black/5">
+              <span className="font-bold text-slate-900">解析：</span>{question.explanation?.replace(/\\n/g, '\n')}
             </div>
           </div>
         </div>
       )}
+
+      <div className="mt-4 flex justify-end">
+        <ReportButton questionId={question.id} />
+      </div>
     </div>
   );
 }

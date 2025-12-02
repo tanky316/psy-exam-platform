@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import ReportButton from "./ReportButton"; // 引入回報按鈕
 
-// [新增] 清理文字工具
+// 強力清潔工具：移除前後引號、移除空白
 const cleanText = (text: string) => {
   if (!text) return "";
   return text.trim().replace(/^["']|["']$/g, "");
@@ -26,11 +27,23 @@ export default function MockExamBoard({
 
   const currentQ = questions[currentIndex];
   
+  // 安全解析選項
   let safeOptions: string[] = [];
   try {
-    safeOptions = Array.isArray(currentQ.options) ? currentQ.options : JSON.parse(currentQ.options);
-  } catch (e) { safeOptions = [] }
+    if (currentQ) {
+      safeOptions = Array.isArray(currentQ.options) ? currentQ.options : JSON.parse(currentQ.options);
+    }
+  } catch (e) { 
+    // 如果一般解析失敗，嘗試清理後再解析
+    try {
+        const cleaned = currentQ.options.replace(/^["']|["']$/g, "").replace(/\\"/g, '"');
+        safeOptions = JSON.parse(cleaned);
+    } catch (e2) {
+        safeOptions = [];
+    }
+  }
 
+  // 倒數計時
   useEffect(() => {
     if (isSubmitted) return;
     if (timeLeft <= 0) {
@@ -60,7 +73,7 @@ export default function MockExamBoard({
 
     questions.forEach((q) => {
       const userAnswer = userAnswers[q.id];
-      // [修改] 比對時使用 cleanText
+      // [修改] 比對時使用 cleanText 移除引號干擾
       if (userAnswer && cleanText(userAnswer) === cleanText(q.answer)) {
         correctCount++;
       } else {
@@ -128,6 +141,9 @@ export default function MockExamBoard({
     );
   }
 
+  // 防止沒題目時崩潰
+  if (!currentQ) return <div>載入中...</div>;
+
   return (
     <div className="max-w-4xl mx-auto">
       <div className="flex justify-between items-center mb-6 bg-slate-800 text-white p-4 rounded-xl shadow-md relative z-20">
@@ -153,7 +169,7 @@ export default function MockExamBoard({
           </h3>
 
           <div className="space-y-3">
-            {safeOptions.map((opt, idx) => (
+            {safeOptions.length > 0 ? safeOptions.map((opt, idx) => (
               <button
                 key={idx}
                 onClick={() => handleSelect(opt)}
@@ -173,33 +189,31 @@ export default function MockExamBoard({
                 {/* [修改] 顯示時移除引號 */}
                 <span className="text-lg">{cleanText(opt)}</span>
               </button>
-            ))}
+            )) : (
+              <div className="text-center text-red-400 p-4">選項載入異常 (ID: {currentQ.id})</div>
+            )}
           </div>
         </div>
 
-        <div className="mt-10 pt-6 border-t border-slate-100 flex justify-between items-center">
-          <button
-            onClick={() => setCurrentIndex(prev => Math.max(0, prev - 1))}
-            disabled={currentIndex === 0}
-            className="px-6 py-3 text-slate-500 hover:text-slate-800 font-bold disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 hover:bg-slate-50 rounded-lg transition-colors"
-          >
-            ← 上一題
-          </button>
-          
-          <div className="hidden md:block w-48 h-2 bg-slate-100 rounded-full overflow-hidden">
-            <div 
-              className="h-full bg-blue-500 transition-all duration-300"
-              style={{ width: `${((currentIndex + 1) / questions.length) * 100}%` }}
-            ></div>
+        <div className="mt-10 pt-6 border-t border-slate-100 flex flex-col gap-4">
+          <div className="flex justify-between items-center">
+            <button onClick={() => setCurrentIndex(prev => Math.max(0, prev - 1))} disabled={currentIndex === 0} className="px-6 py-3 text-slate-500 hover:text-slate-800 font-bold disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2 hover:bg-slate-50 rounded-lg transition-colors">
+              ← 上一題
+            </button>
+            
+            <div className="hidden md:block w-48 h-2 bg-slate-100 rounded-full overflow-hidden">
+              <div className="h-full bg-blue-500 transition-all duration-300" style={{ width: `${((currentIndex + 1) / questions.length) * 100}%` }}></div>
+            </div>
+
+            <button onClick={() => setCurrentIndex(prev => Math.min(questions.length - 1, prev + 1))} disabled={currentIndex === questions.length - 1} className="px-6 py-3 bg-slate-900 text-white rounded-lg font-bold hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-transform active:scale-95">
+              下一題 →
+            </button>
           </div>
 
-          <button
-            onClick={() => setCurrentIndex(prev => Math.min(questions.length - 1, prev + 1))}
-            disabled={currentIndex === questions.length - 1}
-            className="px-6 py-3 bg-slate-900 text-white rounded-lg font-bold hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-transform active:scale-95"
-          >
-            下一題 →
-          </button>
+          {/* [新增] 模擬考中的回報按鈕 (放在最底部靠右) */}
+          <div className="flex justify-end">
+            <ReportButton questionId={currentQ.id} />
+          </div>
         </div>
       </div>
     </div>
