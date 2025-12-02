@@ -21,10 +21,8 @@ export default function ExamPage() {
   const [loading, setLoading] = useState(true);
   const [isVip, setIsVip] = useState(false);
   
-  // [升級] 動態選單資料
-  const [availableTags, setAvailableTags] = useState<string[]>([]);
-  const [availableYears, setAvailableYears] = useState<string[]>([]);
-  const [availableSubjects, setAvailableSubjects] = useState<string[]>([]);
+  // [新增] 標籤列表狀態 (不再是寫死的常數)
+  const [tagList, setTagList] = useState<string[]>([]);
 
   // 模式與篩選
   const [mode, setMode] = useState<'browse' | 'quiz'>('browse');
@@ -33,10 +31,19 @@ export default function ExamPage() {
   const [tagFilter, setTagFilter] = useState('ALL');
   const [onlyMistakes, setOnlyMistakes] = useState(false);
 
-  // --- 初始化邏輯：抓取所有篩選選項 (年份、科目、標籤) ---
+  // --- 初始化：抓取標籤列表 & 使用者資料 ---
   useEffect(() => {
-    const initPage = async () => {
-      // 1. 檢查 VIP
+    const initData = async () => {
+      // 1. 抓取資料庫裡所有「真實存在」的標籤
+      const { data: tagsData, error } = await supabase.rpc('get_unique_tags');
+      if (tagsData) {
+        setTagList(tagsData);
+      } else {
+        // 如果還沒設定 RPC，或資料庫沒標籤，就顯示空或預設
+        console.error("無法抓取標籤，請確認 get_unique_tags 函數已建立", error);
+      }
+
+      // 2. 檢查 VIP 身分
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         const { data: profile } = await supabase
@@ -46,35 +53,14 @@ export default function ExamPage() {
           .single();
         setIsVip(profile?.is_vip || false);
       }
-
-      // 2. [關鍵升級] 一次抓取所有題目資訊來製作選單 (只抓 metadata，不抓內容以節省流量)
-      const { data: allData } = await supabase
-        .from('questions')
-        .select('year, subject, tags');
-
-      if (allData) {
-        // A. 整理年份 (去重複 + 排序：新的在前)
-        const years = Array.from(new Set(allData.map(d => d.year).filter(Boolean)))
-          .sort((a, b) => (b as string).localeCompare(a as string));
-        setAvailableYears(years as string[]);
-
-        // B. 整理科目 (去重複 + 排序)
-        const subjects = Array.from(new Set(allData.map(d => d.subject).filter(Boolean)))
-          .sort(); // 筆畫排序
-        setAvailableSubjects(subjects as string[]);
-
-        // C. 整理標籤 (去重複 + 扁平化)
-        const tags = Array.from(new Set(allData.flatMap(d => d.tags || []))).sort();
-        setAvailableTags(tags);
-      }
     };
 
-    initPage();
+    initData();
   }, []);
 
-  // --- 抓題目邏輯 (當篩選條件改變時觸發) ---
+  // --- 抓題目邏輯 ---
   useEffect(() => {
-    const fetchQuestions = async () => {
+    const fetchData = async () => {
       setLoading(true);
       setQuestions([]);
 
@@ -82,7 +68,7 @@ export default function ExamPage() {
       let rawQuestions: any[] = [];
 
       if (onlyMistakes) {
-        // === 模式 A: 從錯題本抓 ===
+        // 錯題模式
         if (!user) {
           alert("請先登入才能使用錯題功能");
           setOnlyMistakes(false);
@@ -98,20 +84,17 @@ export default function ExamPage() {
           rawQuestions = data.map((item: any) => item.question);
         }
       } else {
-        // === 模式 B: 從總題庫抓 ===
+        // 一般模式
         let query = supabase.from('questions').select('*');
-        
         if (yearFilter !== 'ALL') query = query.eq('year', yearFilter);
         if (subjectFilter !== 'ALL') query = query.eq('subject', subjectFilter);
         if (tagFilter !== 'ALL') query = query.contains('tags', [tagFilter]);
         
-        query = query.order('id', { ascending: true });
-
         const { data } = await query;
         if (data) rawQuestions = data;
       }
 
-      // 前端二次過濾
+      // 前端過濾 (補強錯題模式的篩選)
       if (onlyMistakes) {
         if (yearFilter !== 'ALL') rawQuestions = rawQuestions.filter(q => q.year === yearFilter);
         if (subjectFilter !== 'ALL') rawQuestions = rawQuestions.filter(q => q.subject === subjectFilter);
@@ -127,10 +110,9 @@ export default function ExamPage() {
       setLoading(false);
     };
 
-    fetchQuestions();
+    fetchData();
   }, [yearFilter, subjectFilter, tagFilter, onlyMistakes]);
 
-  // --- 畫面渲染區 ---
   return (
     <div className="space-y-6">
       
@@ -182,48 +164,49 @@ export default function ExamPage() {
           </div>
         </div>
 
-        {/* 動態篩選器 */}
+        {/* 篩選器 */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          
-          {/* 1. 年份 (自動抓取) */}
           <select 
             value={yearFilter}
             onChange={(e) => setYearFilter(e.target.value)}
             className="p-3 border border-slate-300 rounded-lg text-slate-700 bg-white focus:ring-2 focus:ring-blue-500 outline-none"
           >
             <option value="ALL">📅 所有年份</option>
-            {availableYears.map(year => (
-              <option key={year} value={year}>{year} </option>
-            ))}
+            <option value="114-2">114年 第2次</option>
+            <option value="113-1">113年 第1次</option>
+            <option value="112-2">112年 第2次</option>
+            <option value="112-1">112年 第1次</option>
           </select>
 
-          {/* 2. 科目 (自動抓取) */}
           <select 
             value={subjectFilter}
             onChange={(e) => setSubjectFilter(e.target.value)}
             className="p-3 border border-slate-300 rounded-lg text-slate-700 bg-white focus:ring-2 focus:ring-blue-500 outline-none"
           >
             <option value="ALL">📚 所有科目</option>
-            {availableSubjects.map(subject => (
-              <option key={subject} value={subject}>{subject}</option>
-            ))}
+            <option value="諮商的心理學基礎">諮商的心理學基礎</option>
+            <option value="諮商與心理治療理論">諮商與心理治療理論</option>
+            <option value="諮商與心理治療實務與專業倫理">諮商與心理治療實務與專業倫理</option>
+            <option value="心理健康與變態心理學">心理健康與變態心理學</option>
+            <option value="個案評估與心理衡鑑">個案評估與心理衡鑑</option>
+            <option value="團體諮商與心理治療">團體諮商與心理治療</option>
           </select>
           
-          {/* 3. 標籤 (自動抓取) */}
+          {/* [修改] 標籤篩選器現在會讀取 tagList 狀態 */}
           <select 
             value={tagFilter}
             onChange={(e) => setTagFilter(e.target.value)}
             className="p-3 border border-slate-300 rounded-lg text-slate-700 bg-white focus:ring-2 focus:ring-blue-500 outline-none"
           >
-            <option value="ALL">🏷️ 標籤篩選 (全部)</option>
-            {availableTags.map(tag => (
+            <option value="ALL">🏷️ 標籤篩選 (共 {tagList.length} 個)</option>
+            {tagList.map(tag => (
               <option key={tag} value={tag}>{tag}</option>
             ))}
           </select>
         </div>
       </div>
 
-      {/* --- 結果顯示區 --- */}
+      {/* 結果顯示區 */}
       {loading ? (
         <div className="text-center py-10 text-slate-500">
           {onlyMistakes ? '正在挖掘您的錯題...' : '正在從題庫抽題...'}
@@ -253,7 +236,11 @@ export default function ExamPage() {
             if (Array.isArray(q.options)) {
               safeOptions = q.options;
             } else if (typeof q.options === 'string') {
-              try { safeOptions = JSON.parse(q.options); } catch (e) { safeOptions = []; }
+              try {
+                safeOptions = JSON.parse(q.options);
+              } catch (e) {
+                safeOptions = [];
+              }
             }
 
             return (
