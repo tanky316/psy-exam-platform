@@ -7,8 +7,8 @@ export default function LandingPage() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   return (
+    // pt-16 是為了避免內容被 fixed 的導覽列擋住
     <div className="min-h-screen bg-white flex flex-col font-sans text-slate-900 pt-16">
-      {/* pt-16 是為了避免內容被 fixed 的導覽列擋住 */}
       
       {/* --- 1. 頂部導覽列 (Navbar) --- */}
       <nav className="fixed top-0 left-0 right-0 h-16 bg-white border-b border-slate-200 z-[9999] shadow-sm">
@@ -41,7 +41,7 @@ export default function LandingPage() {
                 className="p-2 rounded-lg text-slate-800 hover:bg-slate-100 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 aria-label="開啟選單"
               >
-                {/* 漢堡圖示 (三條線 / X) */}
+                {/* 漢堡圖示 / 關閉圖示 切換 */}
                 <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   {isMenuOpen ? (
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
@@ -54,7 +54,7 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* 手機版下拉選單 (Mobile Menu) - 絕對定位 */}
+        {/* 手機版下拉選單 (Mobile Menu) */}
         {isMenuOpen && (
           <div className="md:hidden absolute top-16 left-0 w-full bg-white border-b border-slate-200 shadow-xl z-[9998] animate-in slide-in-from-top-2">
             <div className="p-4 space-y-4">
@@ -85,7 +85,7 @@ export default function LandingPage() {
       {/* --- 2. 主要內容區 (Hero) --- */}
       <main className="flex-1 flex flex-col items-center justify-center px-6 py-12 text-center">
         
-        <div className="inline-flex items-center gap-2 py-1.5 px-4 rounded-full bg-blue-50 text-blue-700 text-sm font-bold mb-8 border border-blue-100">
+        <div className="inline-flex items-center gap-2 py-1.5 px-4 rounded-full bg-blue-50 text-blue-700 text-sm font-bold mb-8 border border-blue-100 animate-in fade-in slide-in-from-bottom-4">
           <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
           專為諮商心理師國考設計
         </div>
@@ -102,7 +102,7 @@ export default function LandingPage() {
         <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
           <Link 
             href="/login" 
-            className="w-full sm:w-auto inline-flex items-center justify-center bg-slate-900 text-white px-8 py-4 rounded-xl font-bold text-lg hover:bg-slate-800 transition-all shadow-xl"
+            className="w-full sm:w-auto inline-flex items-center justify-center bg-slate-900 text-white px-8 py-4 rounded-xl font-bold text-lg hover:bg-slate-800 transition-all shadow-xl hover:scale-105"
           >
             立即開始練習 →
           </Link>
