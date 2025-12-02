@@ -14,15 +14,28 @@ const cleanText = (text: string) => {
   return text.trim().replace(/^["']|["']$/g, "");
 };
 
-// [修改] 移除前端洗牌，改用後端隨機
-// function shuffleArray ... (移除)
+// 洗牌演算法
+function shuffleArray(array: any[]) {
+  const newArr = [...array];
+  for (let i = newArr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
+  }
+  return newArr;
+}
 
-const ITEMS_PER_PAGE = 20; // 每次只抓 20 題，保證速度飛快
+const ITEMS_PER_PAGE = 20;
 
 export default function ExamPage() {
   const [questions, setQuestions] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true); // 預設載入中
+  
+  // VIP 狀態管理
   const [isVip, setIsVip] = useState(false);
+  const [isCheckingVip, setIsCheckingVip] = useState(true); // [新增] 正在檢查 VIP 狀態
+  
+  const [currentUser, setCurrentUser] = useState<any>(null); // [新增] 暫存使用者，避免重複查詢
+
   const [tagList, setTagList] = useState<string[]>([]);
   const [yearList, setYearList] = useState<string[]>([]);
   const [subjectList, setSubjectList] = useState<string[]>([]);
@@ -37,23 +50,34 @@ export default function ExamPage() {
   const [tagFilter, setTagFilter] = useState('ALL');
   const [onlyMistakes, setOnlyMistakes] = useState(false);
 
-  // [新增] 分頁狀態
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
 
+  // --- 1. 初始化：平行抓取所有資料 (極速版) ---
   useEffect(() => {
-    const initData = async () => {
-      const { data: tags } = await supabase.rpc('get_unique_tags');
-      if (tags) setTagList(tags);
-      const { data: years } = await supabase.rpc('get_unique_years');
-      if (years) setYearList(years);
-      const { data: subjects } = await supabase.rpc('get_unique_subjects');
-      if (subjects) {
-        const customOrder = [
+    const initAllData = async () => {
+      setIsCheckingVip(true);
+
+      // 定義所有要做的請求
+      const promises = [
+        supabase.rpc('get_unique_tags'),     // 0. 標籤
+        supabase.rpc('get_unique_years'),    // 1. 年份
+        supabase.rpc('get_unique_subjects'), // 2. 科目
+        supabase.auth.getUser()              // 3. 使用者
+      ];
+
+      // 同時發射！
+      const [tagsRes, yearsRes, subjectsRes, authRes] = await Promise.all(promises);
+
+      // 處理選單資料
+      if (tagsRes.data) setTagList(tagsRes.data);
+      if (yearsRes.data) setYearList(yearsRes.data);
+      if (subjectsRes.data) {
+         const customOrder = [
           "諮商的心理學基礎", "諮商與心理治療理論", "諮商與心理治療實務與專業倫理",
           "心理健康與變態心理學", "個案評估與心理衡鑑", "團體諮商與心理治療"
         ];
-        setSubjectList(subjects.sort((a: string, b: string) => {
+        setSubjectList(subjectsRes.data.sort((a: string, b: string) => {
           const indexA = customOrder.indexOf(a);
           const indexB = customOrder.indexOf(b);
           if (indexA !== -1 && indexB !== -1) return indexA - indexB;
@@ -62,19 +86,32 @@ export default function ExamPage() {
           return a.localeCompare(b);
         }));
       }
-      const { data: { user } } = await supabase.auth.getUser();
+
+      // 處理使用者與 VIP
+      const user = authRes.data.user;
+      setCurrentUser(user); // 存起來給 fetchQuestions 用
+
       if (user) {
-        const { data: profile } = await supabase.from('profiles').select('is_vip').eq('id', user.id).single();
+        // 如果有登入，馬上去查 VIP 狀態
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('is_vip')
+          .eq('id', user.id)
+          .single();
         setIsVip(profile?.is_vip || false);
       }
+      
+      setIsCheckingVip(false); // VIP 檢查完畢
+
+      // 資料都準備好了，開始抓題目 (傳入剛剛拿到的 user)
+      fetchQuestions('browse', 0, true, user); 
     };
-    initData();
-    // 初始載入
-    fetchQuestions('browse', 0, true); 
+
+    initAllData();
   }, []);
 
-  // [修改] 抓取函數：加入分頁參數
-  const fetchQuestions = async (targetMode: string, pageNum: number, isReset: boolean = false) => {
+  // --- 2. 抓取題目 (使用傳入的 user，不重複 await) ---
+  const fetchQuestions = async (targetMode: string, pageNum: number, isReset: boolean = false, passedUser?: any) => {
     setLoading(true);
     if (isReset) {
       setQuestions([]);
@@ -82,52 +119,47 @@ export default function ExamPage() {
       setHasMore(true);
     }
 
-    const { data: { user } } = await supabase.auth.getUser();
+    // 優先使用傳入的 user，如果沒有則使用 state 裡的，再沒有才去 fetch
+    let user = passedUser || currentUser;
+    if (!user && !passedUser) {
+        const { data } = await supabase.auth.getUser();
+        user = data.user;
+        setCurrentUser(user);
+    }
+
     let newQuestions: any[] = [];
 
-    // --- 錯題模式 ---
     if (onlyMistakes) {
       if (!user) { alert("請先登入"); setLoading(false); return; }
-      // 錯題本通常數量不多，我們維持一次抓取，但在前端做分頁
-      // (如果要優化，需要在資料庫層級改寫，目前先維持原樣以免改壞)
       const { data } = await supabase.from('wrong_answers').select('question:questions(*)').eq('user_id', user.id);
       if (data) newQuestions = data.map((item: any) => item.question);
       
-      // 前端過濾
       if (yearFilter !== 'ALL') newQuestions = newQuestions.filter(q => q.year === yearFilter);
       if (subjectFilter !== 'ALL') newQuestions = newQuestions.filter(q => q.subject === subjectFilter);
       if (tagFilter !== 'ALL') newQuestions = newQuestions.filter(q => q.tags?.includes(tagFilter));
 
-      // 分頁切片
       const start = pageNum * ITEMS_PER_PAGE;
       const end = start + ITEMS_PER_PAGE;
       const sliced = newQuestions.slice(start, end);
       
       if (sliced.length < ITEMS_PER_PAGE) setHasMore(false);
-      
       if (isReset) setQuestions(sliced);
       else setQuestions(prev => [...prev, ...sliced]);
 
     } else {
-      // --- 一般模式 (使用 Supabase 分頁) ---
       let query = supabase.from('questions').select('*');
       
       if (targetMode === 'mock_exam') {
         if (mockSubject !== 'ALL') query = query.eq('subject', mockSubject);
-        // 模擬考隨機抓 N 題 (這裡簡單用 limit)
         query = query.limit(mockCount); 
       } else {
-        // 一般閱覽：加入篩選
         if (yearFilter !== 'ALL') query = query.eq('year', yearFilter);
         if (subjectFilter !== 'ALL') query = query.eq('subject', subjectFilter);
         if (tagFilter !== 'ALL') query = query.contains('tags', [tagFilter]);
         
-        // [關鍵] 加入分頁範圍
         const from = pageNum * ITEMS_PER_PAGE;
         const to = from + ITEMS_PER_PAGE - 1;
         query = query.range(from, to);
-        
-        // 排序 (建議加上排序以確保分頁穩定)
         query = query.order('id', { ascending: true });
       }
       
@@ -135,7 +167,6 @@ export default function ExamPage() {
       
       if (data) {
         if (data.length < ITEMS_PER_PAGE) setHasMore(false);
-        
         if (isReset) setQuestions(data);
         else setQuestions(prev => [...prev, ...data]);
       }
@@ -144,14 +175,15 @@ export default function ExamPage() {
     setLoading(false);
   };
 
-  // 當篩選條件改變時，重置並重抓
   useEffect(() => {
+    // 避免首次 render 重複呼叫 (因為 initAllData 已經叫過了)
+    // 只有當篩選條件改變時才觸發
+    if (loading) return; 
     if (mode === 'browse' || mode === 'quiz') {
       fetchQuestions(mode, 0, true);
     }
   }, [yearFilter, subjectFilter, tagFilter, onlyMistakes]);
 
-  // 載入更多
   const loadMore = () => {
     const nextPage = page + 1;
     setPage(nextPage);
@@ -168,7 +200,7 @@ export default function ExamPage() {
   return (
     <div className="space-y-6">
       
-      {/* 標題與控制列 (保持不變) */}
+      {/* 標題與控制列 */}
       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
         <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-6 gap-4">
           <h2 className="text-2xl font-bold text-slate-900 flex items-center">
@@ -249,7 +281,6 @@ export default function ExamPage() {
               return (
                 <div key={q.id} className={`bg-white p-6 rounded-xl border transition-colors relative ${isEssay ? 'border-purple-200 hover:border-purple-400' : 'border-slate-200 hover:border-blue-300'}`}>
                   
-                  {/* 收藏按鈕 */}
                   <div className="absolute top-4 right-4 z-10">
                     <BookmarkButton questionId={q.id} />
                   </div>
@@ -277,9 +308,15 @@ export default function ExamPage() {
                     </div>
                   )}
                   
+                  {/* VIP 權限區塊 */}
                   <div className="relative overflow-hidden rounded-lg">
-                    {isVip ? (
-                      <div className={`${isEssay ? 'bg-purple-50' : 'bg-green-50'} p-5 text-sm`}>
+                    {/* [關鍵] 在讀取中 (isCheckingVip) 顯示 Loading 狀態，而不是直接顯示鎖頭 */}
+                    {isCheckingVip ? (
+                      <div className="bg-slate-50 p-6 text-center text-slate-400 animate-pulse">
+                        🔐 驗證會員權限中...
+                      </div>
+                    ) : isVip ? (
+                      <div className={`${isEssay ? 'bg-purple-50' : 'bg-green-50'} p-5 text-sm animate-in fade-in`}>
                         <div className="flex justify-between items-center mb-3">
                            {!isEssay ? <p className="font-bold text-green-800">✅ 正確答案：{cleanText(q.answer)}</p> : <p className="font-bold text-purple-800">💡 參考解析</p>}
                            <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">👑 VIP 已解鎖</span>
@@ -306,9 +343,9 @@ export default function ExamPage() {
               );
             })}
             
-            {/* [新增] 載入更多按鈕 */}
+            {/* 載入更多按鈕 */}
             {hasMore && (
-              <div className="text-center pt-8">
+              <div className="text-center pt-8 pb-12">
                 <button 
                   onClick={loadMore} 
                   disabled={loading}
