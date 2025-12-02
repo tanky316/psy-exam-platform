@@ -3,6 +3,12 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 
+// [新增] 清理文字工具
+const cleanText = (text: string) => {
+  if (!text) return "";
+  return text.trim().replace(/^["']|["']$/g, "");
+};
+
 export default function MockExamBoard({ 
   questions, 
   timeLimit, 
@@ -20,13 +26,11 @@ export default function MockExamBoard({
 
   const currentQ = questions[currentIndex];
   
-  // 安全解析選項
   let safeOptions: string[] = [];
   try {
     safeOptions = Array.isArray(currentQ.options) ? currentQ.options : JSON.parse(currentQ.options);
   } catch (e) { safeOptions = [] }
 
-  // 倒數計時器
   useEffect(() => {
     if (isSubmitted) return;
     if (timeLeft <= 0) {
@@ -55,19 +59,19 @@ export default function MockExamBoard({
     const mistakes: any[] = [];
 
     questions.forEach((q) => {
-      if (userAnswers[q.id] === q.answer) {
+      const userAnswer = userAnswers[q.id];
+      // [修改] 比對時使用 cleanText
+      if (userAnswer && cleanText(userAnswer) === cleanText(q.answer)) {
         correctCount++;
-      } else if (userAnswers[q.id]) {
+      } else {
         mistakes.push(q.id);
       }
     });
 
-    // [修改] 計算分數 (保留小數，不四捨五入)
     const finalScore = (correctCount / questions.length) * 100;
     setScore(finalScore);
     setIsSubmitted(true);
 
-    // 存錯題
     const { data: { user } } = await supabase.auth.getUser();
     if (user && mistakes.length > 0) {
       const inserts = mistakes.map(qid => ({ user_id: user.id, question_id: qid }));
@@ -75,7 +79,6 @@ export default function MockExamBoard({
     }
   };
 
-  // --- 考試結果畫面 ---
   if (isSubmitted) {
     return (
       <div className="max-w-2xl mx-auto bg-white p-12 rounded-2xl shadow-xl border border-slate-200 text-center animate-in zoom-in-95 mt-10">
@@ -85,7 +88,6 @@ export default function MockExamBoard({
         
         <div className="my-8 p-8 bg-slate-50 rounded-2xl border border-slate-100">
           <div className="text-7xl font-extrabold text-blue-600 tracking-tight">
-            {/* [修改] 顯示小數點後 2 位 */}
             {score.toFixed(2)}
             <span className="text-2xl text-slate-400 ml-2 font-normal">分</span>
           </div>
@@ -126,10 +128,8 @@ export default function MockExamBoard({
     );
   }
 
-  // --- 考試進行中畫面 ---
   return (
     <div className="max-w-4xl mx-auto">
-      {/* 頂部資訊列 */}
       <div className="flex justify-between items-center mb-6 bg-slate-800 text-white p-4 rounded-xl shadow-md relative z-20">
         <div className="font-mono text-xl font-bold flex items-center gap-2">
           <span className="text-amber-400">⏳</span> {formatTime(timeLeft)}
@@ -147,10 +147,8 @@ export default function MockExamBoard({
       </div>
 
       <div className="bg-white p-6 md:p-10 rounded-2xl border border-slate-200 shadow-sm min-h-[600px] flex flex-col relative">
-        
         <div className="flex-1">
           <h3 className="text-xl md:text-2xl font-bold text-slate-800 mb-8 leading-relaxed">
-            {/* [修改] 移除這裡原本顯示的 #{currentQ.id} */}
             {currentQ.content}
           </h3>
 
@@ -172,7 +170,8 @@ export default function MockExamBoard({
                 }`}>
                   {String.fromCharCode(65 + idx)}
                 </span>
-                <span className="text-lg">{opt}</span>
+                {/* [修改] 顯示時移除引號 */}
+                <span className="text-lg">{cleanText(opt)}</span>
               </button>
             ))}
           </div>
