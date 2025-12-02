@@ -18,7 +18,7 @@ export default function DashboardLayout({
     const checkUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-         // router.push('/login'); 
+          router.push('/login'); 
       } else {
         const { data: profile } = await supabase
           .from('profiles')
