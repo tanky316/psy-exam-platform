@@ -14,24 +14,35 @@ export default function CommentSection({ topicSlug }: { topicSlug: string }) {
   // 1. 載入留言與使用者
   useEffect(() => {
     const fetchData = async () => {
-      // 抓使用者
+      // 抓目前登入者
       const { data: { user } } = await supabase.auth.getUser();
       setCurrentUser(user);
 
-      // 抓留言 (同時抓取 profile 資訊會更完整，這裡先用簡單版)
-      // 我們需要使用 user_id 來判斷是否為本人
-      const { data } = await supabase
-        .from('comments')
-        .select('*')
-        .eq('topic_slug', topicSlug)
-        .order('created_at', { ascending: false }); // 新的在上面
-
-      if (data) setComments(data);
-      setLoading(false);
+      fetchComments();
     };
 
     fetchData();
   }, [topicSlug]);
+
+  // 獨立抓取留言函式
+  const fetchComments = async () => {
+    // [修改重點] 使用 profiles(nickname) 進行關聯查詢
+    const { data, error } = await supabase
+      .from('comments')
+      .select(`
+        *,
+        profiles (nickname)
+      `)
+      .eq('topic_slug', topicSlug)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error("Error fetching comments:", error);
+    } else if (data) {
+      setComments(data);
+    }
+    setLoading(false);
+  };
 
   // 2. 發送留言
   const handleSubmit = async () => {
@@ -50,13 +61,7 @@ export default function CommentSection({ topicSlug }: { topicSlug: string }) {
 
     if (!error) {
       setNewComment("");
-      // 重新抓取留言 (或是手動插入 state 也可以)
-      const { data } = await supabase
-        .from('comments')
-        .select('*')
-        .eq('topic_slug', topicSlug)
-        .order('created_at', { ascending: false });
-      if (data) setComments(data);
+      fetchComments(); // 重新抓取以顯示最新狀態
     } else {
       alert("留言失敗，請稍後再試");
     }
@@ -72,11 +77,14 @@ export default function CommentSection({ topicSlug }: { topicSlug: string }) {
     await supabase.from('comments').delete().eq('id', id);
   };
 
-  // 工具：Email 遮罩 (保護隱私)
-  const maskEmail = (userId: string) => {
-    // 這裡因為沒有 join profile 表，我們先簡單顯示 "User (前4碼)"
-    // 如果你有 profile 表包含 nickname，建議 join 出來顯示
-    return `User_${userId.slice(0, 4)}`;
+  // 工具：顯示名稱邏輯
+  const getDisplayName = (comment: any) => {
+    // 1. 如果有关联到的 nickname 就用 nickname
+    if (comment.profiles?.nickname) {
+      return comment.profiles.nickname;
+    }
+    // 2. 否則顯示遮罩 ID
+    return `User_${comment.user_id.slice(0, 4)}`;
   };
 
   return (
@@ -117,45 +125,50 @@ export default function CommentSection({ topicSlug }: { topicSlug: string }) {
             目前還沒有討論，成為第一個留言的人吧！
           </div>
         ) : (
-          comments.map((comment) => (
-            <div key={comment.id} className="flex gap-4 group">
-              {/* 頭像 (假圖) */}
-              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center text-blue-600 font-bold text-xs border border-blue-200">
-                {comment.user_id.slice(0, 2).toUpperCase()}
-              </div>
-              
-              <div className="flex-1">
-                <div className="bg-slate-50 p-4 rounded-2xl rounded-tl-none border border-slate-100">
-                  <div className="flex justify-between items-start mb-1">
-                    <span className="text-xs font-bold text-slate-600">
-                      {maskEmail(comment.user_id)}
-                      {currentUser && currentUser.id === comment.user_id && (
-                        <span className="ml-2 bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded text-[10px]">我</span>
-                      )}
-                    </span>
-                    <span className="text-[10px] text-slate-400">
-                      {new Date(comment.created_at).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <p className="text-slate-800 text-sm whitespace-pre-wrap leading-relaxed">
-                    {comment.content}
-                  </p>
+          comments.map((comment) => {
+            const displayName = getDisplayName(comment);
+            const firstChar = displayName.charAt(0).toUpperCase();
+
+            return (
+              <div key={comment.id} className="flex gap-4 group">
+                {/* 頭像 (顯示名稱的第一個字) */}
+                <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center text-blue-600 font-bold text-sm border border-blue-200 shadow-sm">
+                  {firstChar}
                 </div>
                 
-                {/* 操作按鈕 (僅本人可見) */}
-                {currentUser && currentUser.id === comment.user_id && (
-                  <div className="flex gap-3 mt-1 ml-2">
-                    <button 
-                      onClick={() => handleDelete(comment.id)}
-                      className="text-[10px] text-slate-400 hover:text-red-500 font-medium transition-colors"
-                    >
-                      刪除
-                    </button>
+                <div className="flex-1">
+                  <div className="bg-slate-50 p-4 rounded-2xl rounded-tl-none border border-slate-100">
+                    <div className="flex justify-between items-start mb-1">
+                      <span className="text-xs font-bold text-slate-700 flex items-center gap-2">
+                        {displayName}
+                        {currentUser && currentUser.id === comment.user_id && (
+                          <span className="bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded text-[10px]">我</span>
+                        )}
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        {new Date(comment.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <p className="text-slate-800 text-sm whitespace-pre-wrap leading-relaxed">
+                      {comment.content}
+                    </p>
                   </div>
-                )}
+                  
+                  {/* 操作按鈕 (僅本人可見) */}
+                  {currentUser && currentUser.id === comment.user_id && (
+                    <div className="flex gap-3 mt-1 ml-2">
+                      <button 
+                        onClick={() => handleDelete(comment.id)}
+                        className="text-[10px] text-slate-400 hover:text-red-500 font-medium transition-colors"
+                      >
+                        刪除
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 

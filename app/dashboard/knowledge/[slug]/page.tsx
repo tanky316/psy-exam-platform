@@ -66,9 +66,9 @@ export default async function KnowledgeDetailPage({ params }: Props) {
     <div className="bg-white min-h-screen">
       
       {/* 頂部閱讀進度條 (視覺裝飾) */}
-      <div className="fixed top-16 left-0 w-full h-1 bg-slate-100 z-40">
-        <div className="h-full bg-blue-500 w-full origin-left scale-x-0 animate-[progress_1s_ease-out_forwards]"></div>
-      </div>
+        <div 
+        className="h-full bg-blue-500 w-full origin-left scale-x-0 animate-[progress_1s_ease-out_forwards]">
+        </div>
 
       <div className="max-w-4xl mx-auto px-4 py-12">
         {/* 麵包屑導航 */}
