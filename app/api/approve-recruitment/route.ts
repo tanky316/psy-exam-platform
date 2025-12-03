@@ -1,11 +1,12 @@
 import { createClient } from "next-sanity";
 import { NextResponse } from "next/server";
+import { randomUUID } from "crypto"; // ✅ 新增：引入 UUID 生成器
 
 // 設定一個擁有寫入權限的 Sanity Client
 const writeClient = createClient({
   projectId: process.env.NEXT_PUBLIC_SANITY_PROJECT_ID,
   dataset: process.env.NEXT_PUBLIC_SANITY_DATASET,
-  token: process.env.SANITY_API_WRITE_TOKEN, // 讀取我們剛剛設的 Token
+  token: process.env.SANITY_API_WRITE_TOKEN,
   apiVersion: "2024-03-12",
   useCdn: false,
 });
@@ -15,7 +16,8 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { title, researcher, reward, deadline, link, description } = body;
 
-    // 在 Sanity 建立新文件
+    // ✅ 關鍵修正：Sanity 的 Array 項目必須包含 "_key"
+    // 我們使用 randomUUID() 為每個區塊生成唯一識別碼
     const doc = {
       _type: 'recruitment',
       title,
@@ -26,9 +28,11 @@ export async function POST(request: Request) {
       isActive: true, // 預設開啟
       description: [
         {
+          _key: randomUUID(), // 必填：段落的 Key
           _type: 'block',
           children: [
             {
+              _key: randomUUID(), // 必填：文字 spans 的 Key
               _type: 'span',
               text: description || '詳情請見報名連結。',
             },
@@ -37,11 +41,11 @@ export async function POST(request: Request) {
       ],
     };
 
-    await writeClient.create(doc);
+    const result = await writeClient.create(doc);
 
-    return NextResponse.json({ message: 'Success' }, { status: 200 });
+    return NextResponse.json({ message: 'Success', id: result._id }, { status: 200 });
   } catch (error) {
-    console.error(error);
-    return NextResponse.json({ message: 'Error' }, { status: 500 });
+    console.error('Sanity Create Error:', error);
+    return NextResponse.json({ message: 'Error creating document' }, { status: 500 });
   }
 }

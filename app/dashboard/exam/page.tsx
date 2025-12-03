@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import ExamBoard from '@/components/ExamBoard';
+import ExamBoard from '@/components/ExamBoard'; // 確保這裡引用的是你更新過後的 ExamBoard (包含防呆邏輯)
 import MockExamBoard from '@/components/MockExamBoard';
 import ReportButton from '@/components/ReportButton';
 import BookmarkButton from '@/components/BookmarkButton';
@@ -14,27 +14,16 @@ const cleanText = (text: string) => {
   return text.trim().replace(/^["']|["']$/g, "");
 };
 
-// 洗牌演算法
-function shuffleArray(array: any[]) {
-  const newArr = [...array];
-  for (let i = newArr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
-  }
-  return newArr;
-}
-
 const ITEMS_PER_PAGE = 20;
 
 export default function ExamPage() {
   const [questions, setQuestions] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true); // 預設載入中
+  const [loading, setLoading] = useState(true);
   
   // VIP 狀態管理
   const [isVip, setIsVip] = useState(false);
-  const [isCheckingVip, setIsCheckingVip] = useState(true); // [新增] 正在檢查 VIP 狀態
-  
-  const [currentUser, setCurrentUser] = useState<any>(null); // [新增] 暫存使用者，避免重複查詢
+  const [isCheckingVip, setIsCheckingVip] = useState(true);
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
   const [tagList, setTagList] = useState<string[]>([]);
   const [yearList, setYearList] = useState<string[]>([]);
@@ -53,23 +42,20 @@ export default function ExamPage() {
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
 
-  // --- 1. 初始化：平行抓取所有資料 (極速版) ---
+  // --- 1. 初始化：平行抓取所有資料 ---
   useEffect(() => {
     const initAllData = async () => {
       setIsCheckingVip(true);
 
-      // 定義所有要做的請求
       const promises = [
-        supabase.rpc('get_unique_tags'),     // 0. 標籤
-        supabase.rpc('get_unique_years'),    // 1. 年份
-        supabase.rpc('get_unique_subjects'), // 2. 科目
-        supabase.auth.getUser()              // 3. 使用者
+        supabase.rpc('get_unique_tags'),
+        supabase.rpc('get_unique_years'),
+        supabase.rpc('get_unique_subjects'),
+        supabase.auth.getUser()
       ];
 
-      // 同時發射！
       const [tagsRes, yearsRes, subjectsRes, authRes] = await Promise.all(promises);
 
-      // 處理選單資料
       if (tagsRes.data) setTagList(tagsRes.data);
       if (yearsRes.data) setYearList(yearsRes.data);
       if (subjectsRes.data) {
@@ -87,12 +73,10 @@ export default function ExamPage() {
         }));
       }
 
-      // 處理使用者與 VIP
       const user = authRes.data.user;
-      setCurrentUser(user); // 存起來給 fetchQuestions 用
+      setCurrentUser(user);
 
       if (user) {
-        // 如果有登入，馬上去查 VIP 狀態
         const { data: profile } = await supabase
           .from('profiles')
           .select('is_vip')
@@ -101,25 +85,22 @@ export default function ExamPage() {
         setIsVip(profile?.is_vip || false);
       }
       
-      setIsCheckingVip(false); // VIP 檢查完畢
-
-      // 資料都準備好了，開始抓題目 (傳入剛剛拿到的 user)
+      setIsCheckingVip(false);
       fetchQuestions('browse', 0, true, user); 
     };
 
     initAllData();
   }, []);
 
-  // --- 2. 抓取題目 (使用傳入的 user，不重複 await) ---
+  // --- 2. 抓取題目 ---
   const fetchQuestions = async (targetMode: string, pageNum: number, isReset: boolean = false, passedUser?: any) => {
     setLoading(true);
     if (isReset) {
-      setQuestions([]);
+      setQuestions([]); // 先清空舊題目
       setPage(0);
       setHasMore(true);
     }
 
-    // 優先使用傳入的 user，如果沒有則使用 state 裡的，再沒有才去 fetch
     let user = passedUser || currentUser;
     if (!user && !passedUser) {
         const { data } = await supabase.auth.getUser();
@@ -134,10 +115,12 @@ export default function ExamPage() {
       const { data } = await supabase.from('wrong_answers').select('question:questions(*)').eq('user_id', user.id);
       if (data) newQuestions = data.map((item: any) => item.question);
       
+      // 前端篩選錯題
       if (yearFilter !== 'ALL') newQuestions = newQuestions.filter(q => q.year === yearFilter);
       if (subjectFilter !== 'ALL') newQuestions = newQuestions.filter(q => q.subject === subjectFilter);
       if (tagFilter !== 'ALL') newQuestions = newQuestions.filter(q => q.tags?.includes(tagFilter));
 
+      // 分頁邏輯
       const start = pageNum * ITEMS_PER_PAGE;
       const end = start + ITEMS_PER_PAGE;
       const sliced = newQuestions.slice(start, end);
@@ -147,12 +130,19 @@ export default function ExamPage() {
       else setQuestions(prev => [...prev, ...sliced]);
 
     } else {
+      // 正常模式
       let query = supabase.from('questions').select('*');
       
       if (targetMode === 'mock_exam') {
+        // === 模擬考模式 ===
+        // 隨機出題邏輯：如果不指定科目，就不加篩選
         if (mockSubject !== 'ALL') query = query.eq('subject', mockSubject);
+        
+        // 注意：Supabase 的 limit 只是限制數量，並非真正的「隨機」。
+        // 如果要真隨機，通常需要後端 function，這裡暫時用 limit + 前端 shuffle 或之後優化
         query = query.limit(mockCount); 
       } else {
+        // === 瀏覽/測驗模式 ===
         if (yearFilter !== 'ALL') query = query.eq('year', yearFilter);
         if (subjectFilter !== 'ALL') query = query.eq('subject', subjectFilter);
         if (tagFilter !== 'ALL') query = query.contains('tags', [tagFilter]);
@@ -176,9 +166,8 @@ export default function ExamPage() {
   };
 
   useEffect(() => {
-    // 避免首次 render 重複呼叫 (因為 initAllData 已經叫過了)
-    // 只有當篩選條件改變時才觸發
     if (loading) return; 
+    // 當篩選條件變動時，如果不處於模擬考設置或模擬考進行中，則重新抓取
     if (mode === 'browse' || mode === 'quiz') {
       fetchQuestions(mode, 0, true);
     }
@@ -190,13 +179,54 @@ export default function ExamPage() {
     fetchQuestions(mode, nextPage, false);
   };
 
-  const startMockExam = () => { setMode('mock_exam'); fetchQuestions('mock_exam', 0, true); };
+  // --- 🔴 修復重點：啟動模擬考的防呆 ---
+  const startMockExam = async () => { 
+    setMode('mock_exam');
+    setLoading(true); // 強制進入載入狀態
+    await fetchQuestions('mock_exam', 0, true); 
+    // fetchQuestions 裡面會處理 setLoading(false)
+  };
 
+  // --- 🔴 修復重點：渲染 MockExamBoard ---
   if (mode === 'mock_exam') {
-    return loading && questions.length === 0 ? <div className="text-center py-20 text-slate-500 animate-pulse">正在準備模擬試卷...</div> : 
-      <MockExamBoard questions={questions} timeLimit={mockTime} onExit={() => { setMode('browse'); fetchQuestions('browse', 0, true); }} />;
+    // 1. 如果正在載入，顯示 Loading
+    if (loading) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
+                <div className="w-12 h-12 border-4 border-slate-200 border-t-amber-500 rounded-full animate-spin"></div>
+                <div className="text-slate-500 font-bold">正在準備您的試卷...</div>
+            </div>
+        );
+    }
+
+    // 2. 如果載入完畢但沒題目，顯示提示 (避免傳空陣列給 MockExamBoard)
+    if (questions.length === 0) {
+        return (
+             <div className="text-center py-20 text-slate-500 bg-slate-50 rounded-xl border border-dashed border-slate-300">
+                <span className="text-4xl block mb-2">🤔</span>
+                <p className="font-bold text-slate-700">該條件下找不到足夠的題目</p>
+                <p className="text-sm text-slate-400 mt-1">請嘗試選擇其他科目或減少題數。</p>
+                <button 
+                    onClick={() => setMode('mock_setup')} 
+                    className="mt-6 bg-slate-900 text-white px-6 py-2 rounded-lg font-bold hover:bg-slate-700"
+                >
+                    返回設定
+                </button>
+            </div>
+        );
+    }
+
+    // 3. 一切正常，渲染考試看板
+    return (
+        <MockExamBoard 
+            questions={questions} 
+            timeLimit={mockTime} 
+            onExit={() => { setMode('browse'); fetchQuestions('browse', 0, true); }} 
+        />
+    );
   }
 
+  // === 以下是一般閱覽/測驗模式的渲染 (保持不變) ===
   return (
     <div className="space-y-6">
       
@@ -208,11 +238,13 @@ export default function ExamPage() {
             {onlyMistakes && <span className="ml-3 text-xs bg-red-100 text-red-600 px-2 py-1 rounded-full">錯題特訓</span>}
           </h2>
           <div className="flex flex-wrap gap-3 items-center w-full xl:w-auto">
+            {/* 只練錯題 Checkbox */}
             <label className="flex items-center cursor-pointer select-none bg-slate-50 px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors">
               <input type="checkbox" className="mr-2" checked={onlyMistakes} onChange={(e) => setOnlyMistakes(e.target.checked)} />
               <span className="text-sm font-bold text-slate-700">只練錯題</span>
             </label>
             <div className="h-8 w-px bg-slate-200 mx-1 hidden xl:block"></div>
+            {/* 模式切換按鈕 */}
             <div className="flex bg-slate-100 p-1 rounded-lg w-full xl:w-auto overflow-x-auto">
               <button onClick={() => setMode('browse')} className={`flex-1 xl:flex-none px-4 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap ${mode === 'browse' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}>📖 閱覽</button>
               <button onClick={() => setMode('quiz')} className={`flex-1 xl:flex-none px-4 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap ${mode === 'quiz' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}>📝 測驗</button>
@@ -269,7 +301,8 @@ export default function ExamPage() {
             <button onClick={() => {setYearFilter('ALL'); setSubjectFilter('ALL'); setTagFilter('ALL'); setOnlyMistakes(false)}} className="text-blue-600 underline mt-4">重置條件</button>
           </div>
         ) : mode === 'quiz' ? (
-          <div className="flex justify-center"><ExamBoard questions={questions} /></div>
+          // 這裡引用的一般模式 ExamBoard，我們假設 ExamBoard 內部也已經加入了防呆
+          <div className="flex justify-center"><ExamBoard questions={questions} timeLimit={0} onExit={() => setMode('browse')} /></div>
         ) : (
           <div className="grid gap-4">
             {questions.map((q, idx) => {
@@ -310,7 +343,6 @@ export default function ExamPage() {
                   
                   {/* VIP 權限區塊 */}
                   <div className="relative overflow-hidden rounded-lg">
-                    {/* [關鍵] 在讀取中 (isCheckingVip) 顯示 Loading 狀態，而不是直接顯示鎖頭 */}
                     {isCheckingVip ? (
                       <div className="bg-slate-50 p-6 text-center text-slate-400 animate-pulse">
                         🔐 驗證會員權限中...

@@ -12,7 +12,7 @@ export default function DashboardLayout({
 }) {
   const [user, setUser] = useState<any>(null);
   const router = useRouter();
-  const pathname = usePathname(); // 用來判斷現在在哪一頁
+  const pathname = usePathname();
 
   useEffect(() => {
     const checkUser = async () => {
@@ -20,7 +20,6 @@ export default function DashboardLayout({
       const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) {
-         // [權限保護] 沒登入就踢回登入頁
          router.push('/login'); 
       } else {
         // 2. 抓取 VIP 資料
@@ -30,7 +29,6 @@ export default function DashboardLayout({
           .eq('id', user.id)
           .single();
         
-        // 合併資料
         setUser({ ...user, ...profile });
       }
     };
@@ -40,8 +38,8 @@ export default function DashboardLayout({
   // 登出功能
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    router.push('/'); // 登出後踢回首頁
-    router.refresh(); // 強制重整以清除快取狀態
+    router.push('/'); 
+    router.refresh();
   };
 
   // 選單項目定義
@@ -53,9 +51,8 @@ export default function DashboardLayout({
     { name: '徵求', href: '/dashboard/recruitment', icon: '📢' },
     { name: '錯題', href: '/dashboard/mistakes', icon: '📒' },
     { name: '收藏', href: '/dashboard/bookmarks', icon: '⭐' },
-    
   ];
-// [新增] 如果是管理員，把入口加進去
+
   if (user?.is_admin) {
     navItems.push({ name: '後台', href: '/dashboard/admin', icon: '🛡️' });
   }
@@ -87,25 +84,37 @@ export default function DashboardLayout({
               <span className="mr-3 text-lg">{item.icon}</span> {item.name}
             </Link>
           ))}
+          
           <div className="my-2 border-t border-slate-100"></div>
+          
+          {/* 關於作者 */}
           <Link href="/dashboard/about" className={`flex items-center px-3 py-2.5 rounded-lg transition-colors ${pathname === '/dashboard/about' ? 'bg-blue-50 text-blue-600 font-bold' : 'text-slate-600 hover:bg-slate-50'}`}>
             <span className="mr-3 text-lg">👤</span> 關於作者
           </Link>
         </nav>
 
-        {/* 使用者與登出區塊 */}
+        {/* --- [修改] 使用者資訊區 (變成可點擊的設定入口) --- */}
         <div className="p-4 border-t border-slate-200 bg-slate-50">
-          <div className="flex items-center mb-3">
+          <Link 
+            href="/dashboard/settings" 
+            className="flex items-center mb-3 p-2 -mx-2 rounded-lg hover:bg-slate-100 transition-colors group cursor-pointer"
+            title="點擊進入個人設定"
+          >
             <div className={`w-9 h-9 rounded-full flex-shrink-0 flex items-center justify-center text-white font-bold text-sm shadow-sm ${user?.is_vip ? 'bg-amber-500' : 'bg-blue-600'}`}>
-              {user?.email ? user.email.charAt(0).toUpperCase() : 'G'}
+              {user?.email ? user.email.charAt(0).toUpperCase() : 'U'}
             </div>
-            <div className="ml-3 overflow-hidden">
-              <p className="text-xs font-bold text-slate-700 truncate" title={user?.email}>{user?.email || '載入中...'}</p>
+            <div className="ml-3 overflow-hidden flex-1">
+              <p className="text-xs font-bold text-slate-700 truncate group-hover:text-blue-600 transition-colors">
+                {user?.nickname || user?.email || '載入中...'}
+              </p>
               <p className={`text-[10px] font-bold ${user?.is_vip ? 'text-amber-600' : 'text-slate-500'}`}>
                 {user?.is_vip ? '👑 VIP尊榮會員' : '🌱 免費會員'}
               </p>
             </div>
-          </div>
+            {/* 設定圖示提示 */}
+            <div className="text-slate-300 group-hover:text-slate-500">⚙️</div>
+          </Link>
+
           <button 
             onClick={handleLogout}
             className="w-full py-2 text-xs font-bold text-red-500 border border-red-200 bg-white rounded-lg hover:bg-red-50 transition-colors flex items-center justify-center gap-2"
@@ -116,12 +125,12 @@ export default function DashboardLayout({
       </aside>
 
       {/* --- 手機版底部導航 (Mobile Bottom Nav) --- */}
-      <div className="md:hidden fixed bottom-0 left-0 w-full bg-white border-t border-slate-200 z-50 flex justify-around items-center h-16 pb-safe shadow-[0_-1px_3px_rgba(0,0,0,0.05)]">
-        {navItems.map((item) => (
+      <div className="md:hidden fixed bottom-0 left-0 w-full bg-white border-t border-slate-200 z-50 flex justify-around items-center h-16 pb-safe shadow-[0_-1px_3px_rgba(0,0,0,0.05)] overflow-x-auto px-1">
+        {navItems.slice(0, 4).map((item) => ( // 手機版空間有限，建議只顯示前 4 個核心功能，或是用 scroll
           <Link 
             key={item.href}
             href={item.href} 
-            className={`flex flex-col items-center justify-center w-full h-full active:scale-95 transition-transform ${
+            className={`flex flex-col items-center justify-center min-w-[3.5rem] h-full active:scale-95 transition-transform ${
               pathname === item.href ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'
             }`}
           >
@@ -129,17 +138,29 @@ export default function DashboardLayout({
             <span className="text-[10px] font-medium">{item.name}</span>
           </Link>
         ))}
+
+        {/* [新增] 手機版設定按鈕 */}
+        <Link 
+          href="/dashboard/settings"
+          className={`flex flex-col items-center justify-center min-w-[3.5rem] h-full active:scale-95 transition-transform ${
+            pathname === '/dashboard/settings' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'
+          }`}
+        >
+          <span className="text-xl mb-0.5">⚙️</span>
+          <span className="text-[10px] font-medium">設定</span>
+        </Link>
+
         {/* 手機版登出按鈕 */}
         <button 
           onClick={handleLogout}
-          className="flex flex-col items-center justify-center w-full h-full text-slate-400 hover:text-red-500 active:scale-95 transition-transform"
+          className="flex flex-col items-center justify-center min-w-[3.5rem] h-full text-slate-400 hover:text-red-500 active:scale-95 transition-transform"
         >
           <span className="text-xl mb-0.5">🚪</span>
           <span className="text-[10px] font-medium">登出</span>
         </button>
       </div>
 
-      {/* --- 右側主要內容區 (配合手機版底部留白 & 電腦版側邊欄) --- */}
+      {/* --- 右側主要內容區 --- */}
       <main className="flex-1 overflow-y-auto p-4 md:p-8 md:ml-64 mb-16 md:mb-0">
         <div className="max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-2 duration-500">
           {children}
