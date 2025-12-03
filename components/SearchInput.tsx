@@ -1,7 +1,6 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useDebouncedCallback } from "use-debounce"; // 如果沒安裝這套件，可以用簡單的 onKeyDown 替代，這裡示範最簡單的 onKeyDown 版本
 
 export default function SearchInput() {
   const searchParams = useSearchParams();
@@ -31,8 +30,6 @@ export default function SearchInput() {
             handleSearch((e.target as HTMLInputElement).value);
           }
         }}
-        // 也可以選擇 onChange 就觸發，但建議搭配 Debounce 避免請求過多
-        // onChange={(e) => handleSearch(e.target.value)} 
         className="relative w-full pl-6 pr-4 py-4 rounded-full border border-slate-200 shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-slate-600 bg-white"
       />
       <div className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-slate-400 pointer-events-none">
