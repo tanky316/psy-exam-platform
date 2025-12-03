@@ -1,34 +1,54 @@
 "use client";
+
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 
-// ... (保留原本 import)
-
 export default function NewRecruitmentPage() {
   const [formData, setFormData] = useState({ 
-    title: '', researcher: '', link: '', 
-    email: '', irb_number: '', description: '' // [新增]
+    title: '', 
+    researcher: '', 
+    link: '', 
+    email: '', 
+    irb_number: '', 
+    description: '',
+    reward: '',    // [新增]
+    deadline: ''   // [新增]
   });
-  // ... (保留 loading, router)
-
-  // *** 請新增以下兩行來修復錯誤 ***
-  const [loading, setLoading] = useState(false); // <--- 新增：定義 loading 狀態
-  const router = useRouter();                    // <--- 新增：定義 router
-  // **********************************
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return alert('請先登入');
 
-    // 存入 Supabase
-    const { error } = await supabase.from('recruitment_submissions').insert({
-      user_id: user.id,
-      ...formData
-    });
-    // ... (保留後續處理)
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        alert('請先登入');
+        return;
+      }
+
+      const { error } = await supabase.from('recruitment_submissions').insert({
+        user_id: user.id,
+        ...formData
+      });
+
+      if (error) throw error;
+
+      alert('提交成功！我們將在審核後刊登您的研究。');
+      router.push('/dashboard/recruitment');
+      
+    } catch (error: any) {
+      console.error(error);
+      alert('提交失敗：' + error.message);
+    } finally {
+      setLoading(false); // [關鍵] 無論成功失敗，都要把 Loading 關掉
+    }
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
   return (
@@ -38,37 +58,50 @@ export default function NewRecruitmentPage() {
         💡 說明：您的申請送出後將由管理員進行審核，審核通過後即會刊登於佈告欄。
       </div>
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* ... (保留原本欄位) ... */}
         
-        {/* [新增] 聯絡 Email */}
         <div>
-          <label className="block text-sm font-medium mb-1">聯絡 Email</label>
-          <input required type="email" className="w-full p-2 border rounded" 
-             onChange={e => setFormData({...formData, email: e.target.value})} />
+          <label className="block text-sm font-medium mb-1">研究標題</label>
+          <input required name="title" className="w-full p-2 border rounded" onChange={handleChange} />
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">單位/主持人</label>
+            <input required name="researcher" className="w-full p-2 border rounded" onChange={handleChange} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">聯絡 Email</label>
+            <input required name="email" type="email" className="w-full p-2 border rounded" onChange={handleChange} />
+          </div>
         </div>
 
-        {/* [新增] IRB 字號 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">參與報酬</label>
+            <input required name="reward" className="w-full p-2 border rounded" placeholder="例如：200元禮券" onChange={handleChange} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">截止日期</label>
+            <input required name="deadline" type="date" className="w-full p-2 border rounded" onChange={handleChange} />
+          </div>
+        </div>
+
         <div>
           <label className="block text-sm font-medium mb-1">研究倫理審查字號 (IRB)</label>
-          <input className="w-full p-2 border rounded" placeholder="如：112-REC-001 (選填)"
-             onChange={e => setFormData({...formData, irb_number: e.target.value})} />
+          <input name="irb_number" className="w-full p-2 border rounded" placeholder="如：112-REC-001 (選填)" onChange={handleChange} />
         </div>
 
-        {/* [新增] 詳細說明 */}
         <div>
-          <label className="block text-sm font-medium mb-1">研究詳細說明 (招募條件、流程等)</label>
-          <textarea required className="w-full p-2 border rounded h-32" 
-             onChange={e => setFormData({...formData, description: e.target.value})} />
+          <label className="block text-sm font-medium mb-1">研究詳細說明</label>
+          <textarea required name="description" className="w-full p-2 border rounded h-32" placeholder="請說明招募對象、研究流程..." onChange={handleChange} />
         </div>
 
-        {/* 連結欄位 */}
         <div>
           <label className="block text-sm font-medium mb-1">報名連結 (Google Form)</label>
-          <input required type="url" className="w-full p-2 border rounded" 
-             onChange={e => setFormData({...formData, link: e.target.value})} />
+          <input required name="link" type="url" className="w-full p-2 border rounded" onChange={handleChange} />
         </div>
 
-        <button disabled={loading} className="w-full bg-blue-600 text-white py-3 rounded font-bold hover:bg-blue-700">
+        <button disabled={loading} className="w-full bg-slate-900 text-white py-3 rounded font-bold hover:bg-slate-800 disabled:opacity-50">
           {loading ? '提交中...' : '送出申請'}
         </button>
       </form>

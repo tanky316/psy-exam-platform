@@ -49,10 +49,16 @@ export default function DashboardLayout({
     { name: '總覽', href: '/dashboard', icon: '🏠' },
     { name: '題庫', href: '/dashboard/exam', icon: '📝' },
     { name: '知識', href: '/dashboard/knowledge', icon: '📚' },
+    { name: '名人', href: '/dashboard/biography', icon: '🧠' },
     { name: '徵求', href: '/dashboard/recruitment', icon: '📢' },
     { name: '錯題', href: '/dashboard/mistakes', icon: '📒' },
     { name: '收藏', href: '/dashboard/bookmarks', icon: '⭐' },
+    
   ];
+// [新增] 如果是管理員，把入口加進去
+  if (user?.is_admin) {
+    navItems.push({ name: '後台', href: '/dashboard/admin', icon: '🛡️' });
+  }
 
   return (
     <div className="flex min-h-screen bg-slate-50 font-sans">

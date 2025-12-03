@@ -1,6 +1,7 @@
 import { client } from '@/lib/sanity';
 import { PortableText } from '@portabletext/react';
 import imageUrlBuilder from '@sanity/image-url';
+import RichText from '@/components/RichText';
 
 export const revalidate = 0;
 
@@ -85,9 +86,9 @@ export default async function AboutPage() {
           <h2 className="text-xl font-bold text-slate-800 mb-6 border-l-4 border-blue-600 pl-4">
             關於我 / 品牌故事
           </h2>
-          <div className="prose prose-slate max-w-none text-slate-600 leading-relaxed">
-            <PortableText value={author.bio} />
-          </div>
+          <div className="mt-4">
+  <RichText content={author.bio} />
+</div>
         </div>
 
       </div>
